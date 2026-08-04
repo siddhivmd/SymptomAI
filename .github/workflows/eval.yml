@@ -1,0 +1,47 @@
+name: SymptomCheck-Mini Living Evaluation Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f symptomcheck-mini/requirements.txt ]; then pip install -r symptomcheck-mini/requirements.txt; else pip install -r requirements.txt; fi
+
+      - name: Execute Clinical Benchmark Evaluation Suite
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -d symptomcheck-mini/eval ]; then cd symptomcheck-mini && PYTHONPATH=. python eval/run_eval.py; else PYTHONPATH=. python eval/run_eval.py; fi
+
+      - name: Commit Updated Evaluation Results & Accuracy Chart
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add eval/results/ || git add symptomcheck-mini/eval/results/
+          if git diff --staged --quiet; then
+            echo "No changes detected in evaluation results."
+          else
+            git commit -m "auto(eval): update benchmark results.csv and living accuracy chart [skip ci]"
+            git push
+          fi

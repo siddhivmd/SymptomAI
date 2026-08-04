@@ -1,0 +1,4 @@
+case_id,arm,position,turn_count
+CASE_001,base,1,2
+CASE_002,base,-1,2
+CASE_008,base,-1,2

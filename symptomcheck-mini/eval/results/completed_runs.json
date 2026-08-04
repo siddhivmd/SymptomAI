@@ -1,0 +1,23 @@
+{
+  "CASE_001:base": {
+    "case_id": "CASE_001",
+    "arm": "base",
+    "position": 1,
+    "turn_count": 2,
+    "status": "completed"
+  },
+  "CASE_002:base": {
+    "case_id": "CASE_002",
+    "arm": "base",
+    "position": -1,
+    "turn_count": 2,
+    "status": "completed"
+  },
+  "CASE_008:base": {
+    "case_id": "CASE_008",
+    "arm": "base",
+    "position": -1,
+    "turn_count": 2,
+    "status": "completed"
+  }
+}
