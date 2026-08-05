@@ -17,17 +17,17 @@ INSTRUCTIONS:
    - Associated symptoms
    - Medical risk factors and past medical history
 
-2. Conduct this interview over at most 6 conversation turns.
+2. Conduct this interview over 4 to 5 conversation turns, asking targeted history-of-present-illness questions.
 
-3. Once history taking is complete (or after at most 6 turns), output a 5-item ranked differential diagnosis in JSON format using the exact schema:
+3. Once history taking is complete (after 4 to 5 turns), output a 5-item ranked differential diagnosis in JSON format. Keep clinical rationales concise (1 short sentence, under 15 words per item). Use the exact schema:
 {{
   "history_summary": "<concise summary of collected history>",
   "differential": [
-    {{"diagnosis": "<Primary Condition>", "rationale": "<Clinical rationale supporting diagnosis>"}},
-    {{"diagnosis": "<Differential 2>", "rationale": "<Clinical rationale>"}},
-    {{"diagnosis": "<Differential 3>", "rationale": "<Clinical rationale>"}},
-    {{"diagnosis": "<Differential 4>", "rationale": "<Clinical rationale>"}},
-    {{"diagnosis": "<Differential 5>", "rationale": "<Clinical rationale>"}}
+    {{"diagnosis": "<Primary Condition>", "rationale": "<Concise clinical rationale (1 short sentence)>"}},
+    {{"diagnosis": "<Differential 2>", "rationale": "<Concise clinical rationale>"}},
+    {{"diagnosis": "<Differential 3>", "rationale": "<Concise clinical rationale>"}},
+    {{"diagnosis": "<Differential 4>", "rationale": "<Concise clinical rationale>"}},
+    {{"diagnosis": "<Differential 5>", "rationale": "<Concise clinical rationale>"}}
   ],
   "disclaimer": "{VERBATIM_DISCLAIMER}"
 }}
@@ -57,7 +57,8 @@ Perform a structured clinical inquiry evaluation following the OPQRST and organ 
         raw_json = self.llm_client.generate_json(
             prompt=prompt,
             system_instruction=SYSTEM_PROMPT,
-            response_schema=AgentResponse
+            response_schema=AgentResponse,
+            max_tokens=450
         )
         raw_json["inquiry_arm"] = PromptArm.STRUCTURED.value
         return AgentResponse(**raw_json)

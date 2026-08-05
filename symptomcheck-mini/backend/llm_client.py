@@ -10,12 +10,17 @@ load_dotenv()
 
 logger = logging.getLogger("llm_client")
 
+AGENT_MODEL = "llama-3.3-70b-versatile"
+SCAFFOLD_MODEL = "llama-3.1-8b-instant"
+
 class LLMClient:
     """
-    LLMClient wrapping Groq API (llama-3.3-70b-versatile) with async & sync generate capabilities
+    LLMClient wrapping Groq API with async & sync generate capabilities
     and .env configuration.
+    - Agent under test uses AGENT_MODEL (llama-3.3-70b-versatile).
+    - Supporting/scaffolding calls use SCAFFOLD_MODEL (llama-3.1-8b-instant).
     """
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "llama-3.3-70b-versatile"):
+    def __init__(self, api_key: Optional[str] = None, model_name: str = AGENT_MODEL):
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.model_name = model_name
         self.use_mock = not bool(self.api_key)
@@ -30,7 +35,7 @@ class LLMClient:
         else:
             logger.warning("No GROQ_API_KEY found in .env. Operating in Mock LLM mode.")
 
-    async def generate(self, system_prompt: str, messages: List[Dict[str, str]], model: Optional[str] = None, max_tokens: Optional[int] = None) -> str:
+    async def generate(self, system_prompt: str, messages: List[Dict[str, str]], model: Optional[str] = None, max_tokens: Optional[int] = 450) -> str:
         """
         Async generation method taking system_prompt and message history list.
         Allows model override and max_tokens capping.
@@ -62,7 +67,7 @@ class LLMClient:
             logger.error(f"Groq API async generate error: {e}")
             return f"Error during generation: {e}"
 
-    def generate_text(self, prompt: str, system_instruction: Optional[str] = None, model: Optional[str] = None, max_tokens: Optional[int] = None) -> str:
+    def generate_text(self, prompt: str, system_instruction: Optional[str] = None, model: Optional[str] = None, max_tokens: Optional[int] = 450) -> str:
         """Synchronous text generation with optional system_instruction, model override, and max_tokens capping."""
         if self.use_mock:
             return "<reasoning>Mock auto-rater</reasoning><position>1</position>"
@@ -90,7 +95,7 @@ class LLMClient:
             logger.error(f"Groq API generate_text error: {e}")
             return ""
 
-    def generate_json(self, prompt: str, system_instruction: Optional[str] = None, response_schema: Optional[Type[BaseModel]] = None, model: Optional[str] = None, max_tokens: Optional[int] = None) -> Dict[str, Any]:
+    def generate_json(self, prompt: str, system_instruction: Optional[str] = None, response_schema: Optional[Type[BaseModel]] = None, model: Optional[str] = None, max_tokens: Optional[int] = 450) -> Dict[str, Any]:
         """Generate structured JSON response with optional model override and max_tokens capping."""
         if self.use_mock:
             return self._generate_mock_response(prompt, response_schema)

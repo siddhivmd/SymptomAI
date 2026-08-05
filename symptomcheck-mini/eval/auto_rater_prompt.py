@@ -17,7 +17,7 @@ CLINICAL MATCHING RULES:
 OUTPUT FORMAT:
 Respond strictly in XML format with no additional commentary outside the XML tags:
 <reasoning>
-Brief clinical explanation of whether and where the ground-truth diagnosis matches an item in the differential list.
+Brief clinical explanation (1-2 short sentences, under 30 words) of whether and where the ground-truth diagnosis matches an item in the differential list.
 </reasoning>
 <position>N</position>
 
@@ -75,7 +75,7 @@ Compare the ground-truth diagnosis against the differential list using clinical 
                 prompt=prompt,
                 system_instruction=AUTO_RATER_PROMPT,
                 model="llama-3.1-8b-instant",
-                max_tokens=250
+                max_tokens=200
             )
             match = re.search(r"<position>\s*(-?\d+)\s*</position>", raw_response)
             if match:

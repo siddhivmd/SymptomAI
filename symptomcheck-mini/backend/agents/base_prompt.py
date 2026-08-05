@@ -31,7 +31,8 @@ Analyze the patient presentation using standard conversational baseline diagnost
         raw_json = self.llm_client.generate_json(
             prompt=prompt,
             system_instruction=SYSTEM_PROMPT,
-            response_schema=AgentResponse
+            response_schema=AgentResponse,
+            max_tokens=450
         )
         raw_json["inquiry_arm"] = PromptArm.BASE.value
         return AgentResponse(**raw_json)

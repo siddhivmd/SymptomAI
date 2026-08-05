@@ -40,36 +40,41 @@ def calculate_token_budget(num_cases: int, target_arm: str) -> Dict[str, Any]:
     """
     Estimates total Groq API token consumption upfront based on optimized arm token footprints:
     - Primary agent under test stays on llama-3.3-70b-versatile capped at max_tokens=450.
-    - Scaffolding calls (patient role-play, auto-rater judge, post-hoc extraction) use llama-3.1-8b-instant capped at max_tokens=250-400.
+    - Scaffolding calls (patient role-play, auto-rater judge, post-hoc extraction) use llama-3.1-8b-instant capped at max_tokens=200-400.
     
     Per-case estimates:
-    - Base arm: 1 conv turn 70b + 1 extraction turn 8b + auto-rater (~1,050 tokens / case)
-    - Structured arm: 5 conv turns 70b + 4 patient 8b turns + auto-rater (~3,200 tokens / case)
-    - Dynamic arm: 3 conv turns 70b + 2 patient 8b turns + auto-rater (~1,900 tokens / case)
+    - Base arm: 1 conv turn 70b + 1 extraction turn 8b + auto-rater (~1,300 tokens / case)
+    - Structured arm: 5 conv turns 70b + 4 patient 8b turns + auto-rater (~3,250 tokens / case)
+    - Dynamic arm: 3 conv turns 70b + 2 patient 8b turns + auto-rater (~2,000 tokens / case)
     """
     arms_to_run = ["base", "structured", "dynamic"] if target_arm == "all" else [target_arm]
     
     per_arm_tokens = {
-        "base": 1050,
-        "structured": 3200,
-        "dynamic": 1900
+        "base": 1300,
+        "structured": 3250,
+        "dynamic": 2000
     }
     
     total_estimated_tokens = sum(per_arm_tokens[arm] * num_cases for arm in arms_to_run)
     total_runs = num_cases * len(arms_to_run)
+    all_arms_tokens_per_case = sum(per_arm_tokens.values())
+    cases_in_100k_all = int(100000 / all_arms_tokens_per_case)
     
     return {
         "num_cases": num_cases,
         "arms": arms_to_run,
         "total_runs": total_runs,
+        "per_arm_tokens": per_arm_tokens,
         "total_tokens": total_estimated_tokens,
+        "all_arms_tokens_per_case": all_arms_tokens_per_case,
+        "cases_in_100k_all": cases_in_100k_all,
         "tpd_limit": 100000,
         "exceeds_tpd": total_estimated_tokens > 100000
     }
 
 def print_token_budget_summary(budget: Dict[str, Any]):
     print("\n" + "=" * 70)
-    print("GROQ API TOKEN BUDGET ESTIMATE (OPTIMIZED)")
+    print("GROQ API TOKEN BUDGET ESTIMATE (REDUCED & OPTIMIZED)")
     print("=" * 70)
     print(f" * Cases to evaluate : {budget['num_cases']}")
     print(f" * Arms selected     : {', '.join(budget['arms'])}")
@@ -78,12 +83,24 @@ def print_token_budget_summary(budget: Dict[str, Any]):
     print(f" * Daily Limit (TPD) : {budget['tpd_limit']:,} tokens")
     print(f" * Scaffolding Model : llama-3.1-8b-instant (Patient & Auto-Rater)")
     print(f" * Agent Model       : llama-3.3-70b-versatile (max_tokens=450)")
+    print("-" * 70)
+    print("Per-Case Token Footprint Estimates:")
+    print("   - Base arm       : ~1,300 tokens / case")
+    print("   - Dynamic arm    : ~2,000 tokens / case")
+    print("   - Structured arm : ~3,250 tokens / case")
+    print("   - All 3 arms     : ~6,550 tokens / case")
+    print("-" * 70)
+    print(f" * 100k TPD Capacity : ~{budget['cases_in_100k_all']} full cases across all 3 arms ({budget['cases_in_100k_all'] * 3} case-runs)")
+    print(" * Single-arm TPD Capacity:")
+    print("   - Base arm alone       : ~76 cases fit in 100k TPD")
+    print("   - Dynamic arm alone    : ~50 cases fit in 100k TPD")
+    print("   - Structured arm alone : ~30 cases fit in 100k TPD")
     
     if budget["exceeds_tpd"]:
-        print("\n[WARNING] Estimated consumption exceeds Groq's 100,000 Tokens/Day (TPD) limit!")
-        print("  Recommendation: Run one arm at a time using `--arm <base|structured|dynamic>`.")
+        print("\n[WARNING] Total 54 case-runs (~117.9k tokens) slightly exceed 100k TPD if run all at once.")
+        print("  Recommendation: Run 15 cases across all 3 arms today (~98k tokens) or run arm-by-arm.")
     else:
-        print("[OK] Estimated consumption fits cleanly inside daily token limits.")
+        print("\n[OK] Estimated consumption fits cleanly inside daily token limits.")
     print("=" * 70 + "\n")
 
 def load_completed_runs() -> Dict[str, Dict[str, Any]]:
@@ -196,7 +213,7 @@ async def run_single_conversation(llm_client: LLMClient, arm: str, case: Dict[st
     messages = [Message(role="patient", content=opening_complaint)]
     
     turn_count = 1
-    max_turns = 1 if arm == "base" else 6
+    max_turns = 1 if arm == "base" else 5
     final_differential: List[Dict[str, Any]] = []
     status = "completed"
 

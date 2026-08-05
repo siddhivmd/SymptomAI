@@ -8,16 +8,16 @@ SYSTEM_PROMPT = f"""You are an AI clinical symptom checker operating under an ad
 
 INSTRUCTIONS:
 1. You have full agency over which follow-up questions to ask based on patient responses to differentiate potential diagnoses.
-2. You MUST ask at least 3 follow-up questions before you are allowed to output your final differential diagnosis.
-3. After asking at least 3 clarifying questions, output a 5-item ranked differential diagnosis in JSON format matching this exact schema:
+2. Ask at least 3 but no more than 4 follow-up questions, then output your final differential diagnosis as soon as you have enough information — do not continue asking questions past turn 4 unless critically necessary.
+3. After asking 3 to 4 clarifying questions, output a 5-item ranked differential diagnosis in JSON format. Keep clinical rationales concise (1 short sentence, under 15 words per item). Use the exact schema:
 {{
   "history_summary": "<concise summary of patient symptoms and history>",
   "differential": [
-    {{"diagnosis": "<Primary Diagnosis>", "rationale": "<Clinical rationale supporting diagnosis>"}},
-    {{"diagnosis": "<Differential 2>", "rationale": "<Clinical rationale>"}},
-    {{"diagnosis": "<Differential 3>", "rationale": "<Clinical rationale>"}},
-    {{"diagnosis": "<Differential 4>", "rationale": "<Clinical rationale>"}},
-    {{"diagnosis": "<Differential 5>", "rationale": "<Clinical rationale>"}}
+    {{"diagnosis": "<Primary Diagnosis>", "rationale": "<Concise clinical rationale (1 short sentence)>"}},
+    {{"diagnosis": "<Differential 2>", "rationale": "<Concise clinical rationale>"}},
+    {{"diagnosis": "<Differential 3>", "rationale": "<Concise clinical rationale>"}},
+    {{"diagnosis": "<Differential 4>", "rationale": "<Concise clinical rationale>"}},
+    {{"diagnosis": "<Differential 5>", "rationale": "<Concise clinical rationale>"}}
   ],
   "disclaimer": "{VERBATIM_DISCLAIMER}"
 }}
@@ -47,7 +47,8 @@ Analyze differential diagnosis uncertainty and formulate adaptive follow-up ques
         raw_json = self.llm_client.generate_json(
             prompt=prompt,
             system_instruction=SYSTEM_PROMPT,
-            response_schema=AgentResponse
+            response_schema=AgentResponse,
+            max_tokens=450
         )
         raw_json["inquiry_arm"] = PromptArm.DYNAMIC.value
         return AgentResponse(**raw_json)
