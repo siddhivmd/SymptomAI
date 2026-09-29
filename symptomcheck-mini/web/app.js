@@ -9,6 +9,8 @@
   };
   const CHAT_TIMEOUT_MS = 90000;   // free-tier backends can take ~60s to wake up
   const HEALTH_TIMEOUT_MS = 70000;
+  const HEALTH_RETRY_MS = 5000;
+  const HEALTH_MAX_ATTEMPTS = 24;  // ~2+ minutes of retries during a cold start
 
   // --- API base URL -------------------------------------------------------
   function resolveApiBase() {
@@ -72,21 +74,39 @@
     el.statusText.textContent = text;
   }
 
-  async function checkHealth() {
+  let mockMode = false;
+  let backendOnline = false;
+
+  function markOnline() {
+    backendOnline = true;
+    setStatus("ok", mockMode ? "Online · mock LLM mode" : "Online");
+  }
+
+  // Free-tier hosts answer with 502/503 while the backend wakes up, so keep
+  // retrying for a few minutes instead of giving up after the first failure.
+  async function checkHealth(attempt = 1) {
     if (!API_BASE) {
       setStatus("bad", "Backend URL not configured");
       showError("This deployment has no BACKEND_URL set. Add it in your hosting provider's environment variables and redeploy.");
       return;
     }
-    setStatus("pending", "Connecting to backend…");
+    if (backendOnline) return;
+    if (attempt === 1) setStatus("pending", "Connecting to backend…");
     const slowHint = setTimeout(() => setStatus("pending", "Waking up backend (can take ~1 min)…"), 4000);
     try {
       const res = await fetchWithTimeout(`${API_BASE}/health`, {}, HEALTH_TIMEOUT_MS);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setStatus("ok", data.mock_mode ? "Online · mock LLM mode" : "Online");
+      mockMode = Boolean(data.mock_mode);
+      markOnline();
     } catch {
-      setStatus("bad", "Backend offline");
+      if (backendOnline) return;
+      if (attempt < HEALTH_MAX_ATTEMPTS) {
+        setStatus("pending", "Waking up backend (can take ~1 min)…");
+        setTimeout(() => checkHealth(attempt + 1), HEALTH_RETRY_MS);
+      } else {
+        setStatus("bad", "Backend offline");
+      }
     } finally {
       clearTimeout(slowHint);
     }
@@ -183,6 +203,7 @@
       if (!res.ok) throw new Error(`The backend returned an error (HTTP ${res.status}).`);
 
       const data = await res.json();
+      markOnline();
       state.messages.push({ role: "assistant", content: data.message || "" });
       if (data.complete && data.ddx_result) state.ddx = data.ddx_result;
     } catch (err) {
