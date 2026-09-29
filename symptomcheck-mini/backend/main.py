@@ -1,5 +1,6 @@
 import os
 import sys
+import csv
 import json
 import logging
 
@@ -16,9 +17,9 @@ from slowapi.errors import RateLimitExceeded
 
 from models import (
     Conversation, AgentResponse, PromptArm, ChatMessage, Message,
-    ClinicalCase, EvalSummary, DDxResult, DDxItem
+    ClinicalCase, EvalSummary, DDxResult, DDxItem, PlainExplanation
 )
-from llm_client import LLMClient
+from llm_client import LLMClient, SCAFFOLD_MODEL
 from agents import BaseAgent, StructuredAgent, DynamicAgent
 from agents.base_prompt import SYSTEM_PROMPT as BASE_PROMPT
 from agents.structured_prompt import SYSTEM_PROMPT as STRUCTURED_PROMPT
@@ -77,6 +78,66 @@ class ChatOutputPayload(BaseModel):
     message: str
     complete: bool
     ddx_result: Optional[DDxResult] = None
+    explanation: Optional[PlainExplanation] = None
+
+PLAIN_LANGUAGE_PROMPT = """You rewrite a clinical differential diagnosis so a patient with no medical training can understand it.
+
+Rules:
+- Use short, everyday words (aim for a 12-year-old reading level). If a medical term is unavoidable, explain it in the same sentence.
+- "plain_name" must be the name a non-medical person would use, never the clinical term itself.
+  Examples: "Vulvovaginal candidiasis" -> "Yeast infection"; "Acute myocardial infarction" -> "Heart attack";
+  "Gastroesophageal reflux disease" -> "Acid reflux"; "Chlamydial cervicitis" -> "Chlamydia (a sexually transmitted infection)".
+  If there is no everyday name, describe it briefly (e.g. "Bacterial vaginosis" -> "Bacterial imbalance in the vagina").
+- Keep the same conditions in the same order. Do not add, remove, or re-rank them, and do not invent new facts.
+- For each condition, say in 1-2 sentences what it is and why it might fit the symptoms described.
+- "next_steps": 2-3 sentences of general guidance on what kind of care to seek and how soon, including warning signs that mean getting help urgently. Do not prescribe medicines or doses.
+- Be calm and non-alarming, but do not downplay serious possibilities.
+
+Return only JSON in exactly this shape:
+{"summary": "<1-2 sentences restating what the patient described, addressed to them as \"you\">",
+ "items": [{"plain_name": "<everyday name>", "explanation": "<1-2 plain sentences>"}],
+ "next_steps": "<2-3 plain sentences>"}"""
+
+
+def parse_json_object(text: str) -> Optional[Dict[str, Any]]:
+    """Parse the outermost {...} so prose or code fences around the JSON don't break parsing."""
+    start, end = text.find("{"), text.rfind("}")
+    if not 0 <= start < end:
+        return None
+    try:
+        data = json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+async def explain_in_plain_language(ddx: DDxResult) -> Optional[PlainExplanation]:
+    """Patient-friendly rewrite of the DDx. The arm prompts are left untouched so benchmark results stay comparable."""
+    if llm_client.use_mock:
+        return None
+    clinical = json.dumps({
+        "history_summary": ddx.history_summary,
+        "differential": [{"diagnosis": d.diagnosis, "rationale": d.rationale} for d in ddx.differential],
+    })
+    text = await llm_client.generate(
+        system_prompt=PLAIN_LANGUAGE_PROMPT,
+        messages=[{"role": "user", "content": clinical}],
+        model=SCAFFOLD_MODEL,
+        max_tokens=700,
+    )
+    data = parse_json_object(text)
+    if not data:
+        logger.warning("Plain-language explanation could not be parsed; returning clinical DDx only.")
+        return None
+    try:
+        explanation = PlainExplanation.model_validate(data)
+    except Exception as e:
+        logger.warning(f"Plain-language explanation failed validation: {e}")
+        return None
+    # Only trust item-by-item alignment when the model kept the same list length.
+    if len(explanation.items) != len(ddx.differential):
+        explanation.items = []
+    return explanation
 
 @app.get("/")
 @app.get("/health")
@@ -102,22 +163,24 @@ async def chat_endpoint(request: Request, payload: ChatInputPayload):
 
     complete = False
     ddx_res = None
+    explanation = None
 
-    try:
-        # Take the outermost {...} so prose or code fences around the JSON don't break parsing.
-        start, end = response_text.find("{"), response_text.rfind("}")
-        data = json.loads(response_text[start:end + 1]) if 0 <= start < end else None
-        if isinstance(data, dict) and "differential" in data:
+    data = parse_json_object(response_text)
+    if data and "differential" in data:
+        try:
             ddx_res = DDxResult.model_validate(data)
             complete = True
-    except Exception:
-        complete = False
-        ddx_res = None
+        except Exception:
+            ddx_res = None
+
+    if ddx_res:
+        explanation = await explain_in_plain_language(ddx_res)
 
     return ChatOutputPayload(
         message=response_text,
         complete=complete,
-        ddx_result=ddx_res
+        ddx_result=ddx_res,
+        explanation=explanation
     )
 
 @app.post("/api/chat", response_model=AgentResponse)
@@ -167,6 +230,34 @@ def get_synthetic_cases():
     with open(cases_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return [ClinicalCase(**item) for item in data]
+
+@app.get("/api/results")
+def get_benchmark_results():
+    """Benchmark results from eval/results/results.csv, summarised per arm (used by the mobile app)."""
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "eval", "results", "results.csv")
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="Benchmark results not found")
+
+    with open(csv_path, "r", encoding="utf-8") as f:
+        rows = [
+            {"case_id": r["case_id"], "arm": r["arm"], "position": int(r["position"]), "turn_count": int(r["turn_count"])}
+            for r in csv.DictReader(f)
+        ]
+
+    arms = []
+    for arm in [a.value for a in PromptArm]:
+        arm_rows = [r for r in rows if r["arm"] == arm]
+        if not arm_rows:
+            continue
+        n = len(arm_rows)
+        arms.append({
+            "arm": arm,
+            "cases": n,
+            "top1": sum(r["position"] == 1 for r in arm_rows) / n,
+            "top5": sum(1 <= r["position"] <= 5 for r in arm_rows) / n,
+            "avg_turns": sum(r["turn_count"] for r in arm_rows) / n,
+        })
+    return {"arms": arms, "cases": rows}
 
 @app.delete("/api/session/{session_id}")
 def reset_session(session_id: str):

@@ -49,6 +49,18 @@ class DDxResult(BaseModel):
         description="Medical disclaimer"
     )
 
+class PlainDDxItem(BaseModel):
+    plain_name: str = Field(default="", description="Everyday name for the condition")
+    explanation: str = Field(default="", description="What it is and why it fits, in plain words")
+
+
+class PlainExplanation(BaseModel):
+    """Patient-friendly rewrite of a DDxResult, shown alongside the clinical wording."""
+    summary: str = Field(default="", description="Plain summary of what the patient described")
+    items: List[PlainDDxItem] = Field(default_factory=list, description="Same order as the differential")
+    next_steps: str = Field(default="", description="General guidance on when and where to seek care")
+
+
 class AgentResponse(BaseModel):
     followup_questions: List[str] = Field(default_factory=list)
     differential_diagnosis: List[DDxItem] = Field(default_factory=list)

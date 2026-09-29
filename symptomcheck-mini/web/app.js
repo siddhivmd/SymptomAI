@@ -31,6 +31,7 @@
     arm: randomArm(),
     messages: [],      // { role: "patient" | "assistant", content }
     ddx: null,
+    explanation: null,  // plain-language rewrite of ddx, when the backend provides one
     busy: false,
   };
 
@@ -128,7 +129,7 @@
     state.messages.forEach((m, i) => {
       const isFinal = state.ddx && i === state.messages.length - 1 && m.role === "assistant";
       const wrap = make("div", `msg msg-${m.role === "patient" ? "patient" : "assistant"}`);
-      const text = isFinal ? "Thanks — I have enough information. Here is the differential diagnosis." : m.content;
+      const text = isFinal ? "Thanks — I have enough information. Here is what might be going on." : m.content;
       wrap.append(make("div", "bubble", text));
       if (m.role !== "patient") {
         wrap.append(make("div", "msg-meta", "Educational demo only — not medical advice."));
@@ -145,7 +146,7 @@
       el.messages.append(typing);
     }
 
-    if (state.ddx) el.messages.append(renderDdx(state.ddx));
+    if (state.ddx) el.messages.append(renderDdx(state.ddx, state.explanation));
 
     el.messages.scrollTop = el.messages.scrollHeight;
 
@@ -155,22 +156,63 @@
     el.input.placeholder = done ? "Consultation complete — reset to start a new one." : "Describe your symptoms…";
   }
 
-  function renderDdx(ddx) {
+  function renderDdx(ddx, plain) {
     const card = make("div", "ddx");
-    card.append(make("h3", null, "Differential diagnosis"));
-    if (ddx.history_summary) {
-      const p = make("p", "small");
-      p.append(make("strong", null, "History summary: "), document.createTextNode(ddx.history_summary));
+    const differential = ddx.differential || [];
+    const plainItems = (plain && plain.items) || [];
+
+    card.append(make("h3", null, "What might be going on"));
+    const summary = (plain && plain.summary) || ddx.history_summary;
+    if (summary) {
+      const p = make("p", "dx-summary");
+      p.append(make("strong", null, "What you told us: "), document.createTextNode(summary));
       card.append(p);
     }
-    const list = make("ol");
-    (ddx.differential || []).forEach((item) => {
+    card.append(make("p", "dx-intro muted small",
+      "These are possibilities to discuss with a clinician, listed from most to least likely. They are not a diagnosis."));
+
+    const list = make("ol", "dx-list");
+    differential.forEach((item, i) => {
+      const clinicalName = item.diagnosis || item.condition_name || "Unnamed";
+      const p = plainItems[i];
       const li = make("li");
-      li.append(make("span", "dx-name", item.diagnosis || item.condition_name || "Unnamed"));
-      if (item.rationale) li.append(make("span", "dx-why", item.rationale));
+
+      const head = make("div", "dx-head");
+      head.append(make("span", "dx-name", (p && p.plain_name) || clinicalName));
+      if (i === 0) head.append(make("span", "dx-badge", "Most likely"));
+      li.append(head);
+
+      if (p && p.plain_name && p.plain_name.toLowerCase() !== clinicalName.toLowerCase()) {
+        li.append(make("span", "dx-term", `Medical term: ${clinicalName}`));
+      }
+      const why = (p && p.explanation) || item.rationale;
+      if (why) li.append(make("span", "dx-why", why));
       list.append(li);
     });
     card.append(list);
+
+    if (plain && plain.next_steps) {
+      const next = make("div", "dx-next");
+      next.append(make("strong", null, "What to do next"), make("p", null, plain.next_steps));
+      card.append(next);
+    }
+
+    // Keep the original clinical wording available for anyone who wants it.
+    if (plainItems.length) {
+      const details = make("details", "dx-clinical");
+      details.append(make("summary", null, "Show clinical details"));
+      if (ddx.history_summary) details.append(make("p", "small", ddx.history_summary));
+      const clinicalList = make("ol", "small");
+      differential.forEach((item) => {
+        const li = make("li");
+        li.append(make("strong", null, item.diagnosis || item.condition_name || "Unnamed"));
+        if (item.rationale) li.append(document.createTextNode(` — ${item.rationale}`));
+        clinicalList.append(li);
+      });
+      details.append(clinicalList);
+      card.append(details);
+    }
+
     card.append(make("p", "dx-disclaimer", ddx.disclaimer || "Educational demo only. Not a medical device."));
     return card;
   }
@@ -205,7 +247,10 @@
       const data = await res.json();
       markOnline();
       state.messages.push({ role: "assistant", content: data.message || "" });
-      if (data.complete && data.ddx_result) state.ddx = data.ddx_result;
+      if (data.complete && data.ddx_result) {
+        state.ddx = data.ddx_result;
+        state.explanation = data.explanation || null;
+      }
     } catch (err) {
       // Roll back the unanswered message so the conversation history stays consistent.
       state.messages.pop();
@@ -227,6 +272,7 @@
   function resetConsultation() {
     state.messages = [];
     state.ddx = null;
+    state.explanation = null;
     state.arm = state.armChoice === "random" ? randomArm() : state.armChoice;
     clearError();
     el.input.value = "";

@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://symptomai-4wvn.onrender.com"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://symptomai-4wvn.onrender.com"
+      }
+    }
+  }
+}

@@ -218,6 +218,30 @@ npm run build            # BACKEND_URL defaults to http://127.0.0.1:8000 on loca
 python -m http.server 5500 --directory dist
 ```
 
+### Option D: Mobile App (Android / iOS, via Expo)
+
+`symptomcheck-mini/mobile/` is a React Native app (Expo SDK 57, Expo Router) with the same consultation chat, plain-language diagnosis card, and benchmark results as the web frontend. It talks to the deployed Render backend by default; set `EXPO_PUBLIC_BACKEND_URL` in `mobile/.env` or `mobile/eas.json` to use another one. Everything below is free.
+
+**Try it on your phone (no build needed)**
+1. Install **Expo Go** from the Play Store / App Store.
+2. Run:
+   ```bash
+   cd symptomcheck-mini/mobile
+   npm install
+   npx expo start          # add --tunnel if your phone and computer are on different networks
+   ```
+3. Scan the QR code with Expo Go (Android) or the Camera app (iPhone).
+
+**Build an installable Android APK** (free Expo account, no card, no Play Store)
+```bash
+cd symptomcheck-mini/mobile
+npx eas-cli@latest login
+npx eas-cli@latest build -p android --profile preview
+```
+The build runs in Expo's cloud and gives you a download link and QR code for the `.apk`. Install it on any Android phone (allow "Install unknown apps" when prompted). Publishing to Google Play or the App Store is optional and paid ($25 once / $99 per year).
+
+Checks: `npm run typecheck`, `npm run lint`, `npx expo-doctor`.
+
 > ⚡ **Cold Start Notice**:
 > Free-tier hosting on Render spins down containers after 15 minutes of inactivity. The first HTTP request after dormancy may take **~30 seconds** to wake up the server.
 
