@@ -1,0 +1,35 @@
+name: SymptomCheck-Mini CI Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f symptomcheck-mini/requirements.txt ]; then pip install -r symptomcheck-mini/requirements.txt; fi
+
+      - name: Run Pytest Unit & Integration Tests (Mocked LLM)
+        run: |
+          if [ -d symptomcheck-mini ]; then
+            PYTHONPATH=symptomcheck-mini python -m pytest symptomcheck-mini/tests/ symptomcheck-mini/backend/tests/ -v
+          else
+            PYTHONPATH=. python -m pytest tests/ backend/tests/ -v
+          fi

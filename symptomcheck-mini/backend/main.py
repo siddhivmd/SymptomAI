@@ -104,13 +104,9 @@ async def chat_endpoint(request: Request, payload: ChatInputPayload):
     ddx_res = None
 
     try:
-        cleaned_text = response_text.strip()
-        if "```json" in cleaned_text:
-            cleaned_text = cleaned_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in cleaned_text:
-            cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
-
-        data = json.loads(cleaned_text)
+        # Take the outermost {...} so prose or code fences around the JSON don't break parsing.
+        start, end = response_text.find("{"), response_text.rfind("}")
+        data = json.loads(response_text[start:end + 1]) if 0 <= start < end else None
         if isinstance(data, dict) and "differential" in data:
             ddx_res = DDxResult.model_validate(data)
             complete = True
@@ -125,7 +121,8 @@ async def chat_endpoint(request: Request, payload: ChatInputPayload):
     )
 
 @app.post("/api/chat", response_model=AgentResponse)
-def process_chat(req: ChatRequest):
+@limiter.limit("10/minute")
+def process_chat(request: Request, req: ChatRequest):
     """
     Process patient chat input using specified prompt strategy arm (legacy endpoint).
     """

@@ -21,8 +21,17 @@ SYSTEM_PROMPTS = {
     "dynamic": DYNAMIC_PROMPT
 }
 
-# Backend API endpoint configuration
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000/chat")
+def get_backend_url():
+    url = os.getenv("BACKEND_URL")
+    if not url:
+        try:
+            if hasattr(st, "secrets") and "BACKEND_URL" in st.secrets:
+                url = st.secrets["BACKEND_URL"]
+        except Exception:
+            pass
+    return url or "http://127.0.0.1:8000/chat"
+
+BACKEND_URL = get_backend_url()
 
 # Page configuration
 st.set_page_config(
@@ -106,8 +115,11 @@ with tab_chat:
     # Display message history
     for msg in st.session_state.messages:
         role = msg.get("role", "user")
-        with st.chat_message("user" if role in ["user", "patient"] else "assistant"):
+        is_assistant = role not in ["user", "patient"]
+        with st.chat_message("user" if not is_assistant else "assistant"):
             st.write(msg.get("content", ""))
+            if is_assistant:
+                st.caption("⚠️ *Educational demo only — not medical advice. Consult a licensed clinician for medical concerns.*")
 
     # Display completed DDx Result if available
     if st.session_state.ddx_complete and st.session_state.latest_ddx:

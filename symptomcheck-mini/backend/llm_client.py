@@ -10,18 +10,37 @@ load_dotenv()
 
 logger = logging.getLogger("llm_client")
 
-AGENT_MODEL = "llama-3.3-70b-versatile"
-SCAFFOLD_MODEL = "llama-3.1-8b-instant"
+# Groq retired the Llama 3.x models; override with env vars if these change again.
+AGENT_MODEL = os.getenv("GROQ_AGENT_MODEL", "openai/gpt-oss-120b")
+SCAFFOLD_MODEL = os.getenv("GROQ_SCAFFOLD_MODEL", "openai/gpt-oss-20b")
+
+# Reasoning models (gpt-oss) spend hidden reasoning tokens from the same max_tokens
+# budget, so visible-output caps need headroom or JSON replies get cut off mid-object.
+REASONING_HEADROOM = 1500
+
+def token_cap(model: str, max_tokens: int) -> int:
+    if "gpt-oss" in model or "qwen3" in model:
+        return max_tokens + REASONING_HEADROOM
+    return max_tokens
 
 class LLMClient:
     """
     LLMClient wrapping Groq API with async & sync generate capabilities
     and .env configuration.
-    - Agent under test uses AGENT_MODEL (llama-3.3-70b-versatile).
-    - Supporting/scaffolding calls use SCAFFOLD_MODEL (llama-3.1-8b-instant).
+    - Agent under test uses AGENT_MODEL (openai/gpt-oss-120b).
+    - Supporting/scaffolding calls use SCAFFOLD_MODEL (openai/gpt-oss-20b).
     """
     def __init__(self, api_key: Optional[str] = None, model_name: str = AGENT_MODEL):
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        if not api_key:
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                try:
+                    import streamlit as st
+                    if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+                        api_key = st.secrets["GROQ_API_KEY"]
+                except Exception:
+                    pass
+        self.api_key = api_key
         self.model_name = model_name
         self.use_mock = not bool(self.api_key)
 
@@ -59,7 +78,7 @@ class LLMClient:
                 "temperature": 0.2,
             }
             if max_tokens:
-                kwargs["max_tokens"] = max_tokens
+                kwargs["max_tokens"] = token_cap(kwargs["model"], max_tokens)
 
             response = await async_client.chat.completions.create(**kwargs)
             return response.choices[0].message.content or ""
@@ -87,7 +106,7 @@ class LLMClient:
                 "temperature": 0.0,
             }
             if max_tokens:
-                kwargs["max_tokens"] = max_tokens
+                kwargs["max_tokens"] = token_cap(kwargs["model"], max_tokens)
 
             response = client.chat.completions.create(**kwargs)
             return response.choices[0].message.content or ""
@@ -116,7 +135,7 @@ class LLMClient:
                 "temperature": 0.2,
             }
             if max_tokens:
-                kwargs["max_tokens"] = max_tokens
+                kwargs["max_tokens"] = token_cap(kwargs["model"], max_tokens)
 
             response = client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content or "{}"

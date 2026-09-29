@@ -153,6 +153,38 @@ async def simulate_patient_response(llm_client: LLMClient, full_case_notes: str,
     )
     return response
 
+def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Robustly extracts a JSON dict from raw LLM text response:
+    1. Searches for substring between first '{' and last '}'.
+    2. Falls back to markdown code fence stripping if braces extraction fails.
+    """
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        json_substring = text[first_brace:last_brace + 1].strip()
+        try:
+            res = json.loads(json_substring)
+            if isinstance(res, dict):
+                return res
+        except Exception:
+            pass
+
+    cleaned_text = text.strip()
+    if "```json" in cleaned_text:
+        cleaned_text = cleaned_text.split("```json")[1].split("```")[0].strip()
+    elif "```" in cleaned_text:
+        cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
+
+    try:
+        res = json.loads(cleaned_text)
+        if isinstance(res, dict):
+            return res
+    except Exception:
+        pass
+
+    return None
+
 async def extract_post_hoc_ddx(llm_client: LLMClient, conversation_messages: List[Message]) -> List[Dict[str, Any]]:
     """
     SymptomAI Paper (Appendix B.3) Post-Hoc Extraction Step:
@@ -186,17 +218,11 @@ async def extract_post_hoc_ddx(llm_client: LLMClient, conversation_messages: Lis
         max_tokens=400
     )
     
-    cleaned_text = raw_res.strip()
-    if "```json" in cleaned_text:
-        cleaned_text = cleaned_text.split("```json")[1].split("```")[0].strip()
-    elif "```" in cleaned_text:
-        cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
-        
-    try:
-        data = json.loads(cleaned_text)
-        return data.get("differential") or data.get("differential_diagnosis") or []
-    except Exception as e:
-        logger.warning(f"Post-hoc DDx JSON extraction parsing failed: {e}")
+    parsed = extract_json_object(raw_res)
+    if parsed:
+        return parsed.get("differential") or parsed.get("differential_diagnosis") or []
+    else:
+        logger.warning(f"Post-hoc DDx JSON extraction parsing failed. Raw response text:\n{raw_res}")
         return []
 
 async def run_single_conversation(llm_client: LLMClient, arm: str, case: Dict[str, Any]) -> Dict[str, Any]:
@@ -238,21 +264,14 @@ async def run_single_conversation(llm_client: LLMClient, arm: str, case: Dict[st
                     "status": "rate_limited"
                 }
 
-            cleaned_text = response_text.strip()
-            if "```json" in cleaned_text:
-                cleaned_text = cleaned_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in cleaned_text:
-                cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
-
-            parsed_json = None
-            try:
-                parsed_json = json.loads(cleaned_text)
-            except Exception:
-                parsed_json = None
+            parsed_json = extract_json_object(response_text)
 
             if isinstance(parsed_json, dict) and ("differential" in parsed_json or "differential_diagnosis" in parsed_json):
                 final_differential = parsed_json.get("differential") or parsed_json.get("differential_diagnosis") or []
                 break
+            else:
+                if parsed_json is None and ("{" in response_text or "```" in response_text):
+                    logger.warning(f"JSON extraction failed for {case_id} [{arm}] at turn {turn_count}. Raw response text:\n{response_text}")
 
             # Explicit Mock mode handling ONLY when llm_client.use_mock is True
             if llm_client.use_mock:

@@ -150,6 +150,79 @@ Open your browser to `http://localhost:8501`.
 
 ---
 
+## 🚀 Public Cloud Deployment Guide
+
+### Architecture & Service Requirements
+SymptomCheck-Mini supports two deployment configurations:
+
+1. **Two-Service Setup (Recommended for Production / Rate Limiting)**:
+   - **Backend**: FastAPI deployed on [Render](https://render.com/) enforcing `slowapi` rate-limiting (10 req/min/IP).
+   - **Frontend**: Streamlit app deployed on [Streamlit Community Cloud](https://share.streamlit.io/) with `BACKEND_URL` pointing to Render.
+2. **Single-Service Standalone Setup**:
+   - **Frontend**: Deploy Streamlit app alone on Streamlit Community Cloud with `GROQ_API_KEY`. If no backend is specified or backend is offline, the Streamlit app automatically falls back to direct LLM execution via Groq API.
+
+---
+
+### Option A: Deploying Backend to Render
+
+1. Create a free account at [render.com](https://render.com/).
+2. Click **New +** -> **Blueprint** (or **Web Service**) and connect your GitHub repository.
+3. If using **Blueprint**, Render automatically detects `render.yaml`.
+4. If manually configuring a **Web Service**:
+   - **Root Directory**: `symptomcheck-mini`
+   - **Runtime**: `Python`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+5. Under **Environment**, add your secret key:
+   - Key: `GROQ_API_KEY`, Value: `gsk_your_actual_groq_key`
+6. Click **Deploy Web Service**.
+7. Note your live backend URL (e.g., `https://symptomcheck-mini-backend.onrender.com/chat`).
+
+---
+
+### Option B: Deploying Frontend to Streamlit Community Cloud
+
+1. Push your repository to GitHub.
+2. Sign in to [share.streamlit.io](https://share.streamlit.io/).
+3. Click **New App** and select your repository, branch, and file path:
+   - **Main file path**: `symptomcheck-mini/frontend/app.py`
+4. Click **Advanced settings...** -> **Secrets** and paste:
+   ```toml
+   GROQ_API_KEY = "gsk_your_actual_groq_key"
+   BACKEND_URL = "https://your-render-backend-url.onrender.com/chat"
+   ```
+5. Click **Deploy!**
+
+### Option C: Deploying the Static Web Frontend to Vercel or Netlify
+
+`symptomcheck-mini/web/` is a dependency-free static site (HTML/CSS/JS) that calls the Render backend directly. It needs the backend from Option A to be running; it does not call Groq itself, so no API key is exposed in the browser.
+
+**Vercel**
+1. Import the repository at [vercel.com/new](https://vercel.com/new).
+2. Set **Root Directory** to `symptomcheck-mini/web` (framework preset: *Other*). Build settings are read from `web/vercel.json`.
+3. Add an environment variable `BACKEND_URL = https://your-render-backend-url.onrender.com`.
+4. Deploy.
+
+**Netlify**
+1. **Add new site → Import an existing project** and pick the repository.
+2. Set **Base directory** to `symptomcheck-mini/web`. Build command and publish directory are read from `web/netlify.toml`.
+3. Add an environment variable `BACKEND_URL = https://your-render-backend-url.onrender.com`.
+4. Deploy.
+
+`BACKEND_URL` is baked into `config.js` at build time, so redeploy after changing it. The build also copies `eval/results/results.csv` and `accuracy_by_arm.png` into the site for the **Evaluation results** tab.
+
+To run it locally against a local backend:
+```bash
+cd symptomcheck-mini/web
+npm run build            # BACKEND_URL defaults to http://127.0.0.1:8000 on localhost
+python -m http.server 5500 --directory dist
+```
+
+> ⚡ **Cold Start Notice**:
+> Free-tier hosting on Render spins down containers after 15 minutes of inactivity. The first HTTP request after dormancy may take **~30 seconds** to wake up the server.
+
+---
+
 ## ⚠️ PROMINENT MEDICAL DISCLAIMER
 
 > [!CAUTION]

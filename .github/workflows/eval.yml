@@ -30,7 +30,7 @@ jobs:
 
       - name: Execute Clinical Benchmark Evaluation Suite
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           if [ -d symptomcheck-mini/eval ]; then cd symptomcheck-mini && PYTHONPATH=. python eval/run_eval.py; else PYTHONPATH=. python eval/run_eval.py; fi
 

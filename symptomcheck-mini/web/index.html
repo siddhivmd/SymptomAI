@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SymptomCheck-Mini</title>
+  <meta name="description" content="Educational AI symptom checker demo comparing base, structured, and dynamic prompting strategies.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">🩺</span>
+      <div>
+        <h1>SymptomCheck-Mini</h1>
+        <p class="tagline">AI clinical symptom checker &amp; prompting strategy benchmark</p>
+      </div>
+    </div>
+    <div id="status" class="status status-pending" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span><span id="status-text">Connecting…</span>
+    </div>
+  </header>
+
+  <div class="disclaimer-banner" role="note">
+    <strong>Educational demo, not a medical device.</strong>
+    It does not provide medical advice, diagnosis, or treatment. Always consult a licensed clinician for medical concerns.
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-chat" id="tab-chat">Consultation</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-results" id="tab-results">Evaluation results</button>
+  </nav>
+
+  <main>
+    <section id="panel-chat" class="panel layout" role="tabpanel" aria-labelledby="tab-chat">
+      <aside class="sidebar card">
+        <label for="arm-select" class="label">Prompting arm</label>
+        <select id="arm-select">
+          <option value="random">Random (trial-style)</option>
+          <option value="base">Base</option>
+          <option value="structured">Structured</option>
+          <option value="dynamic">Dynamic</option>
+        </select>
+        <p class="active-arm">Active arm: <code id="active-arm">—</code> <span id="arm-note" class="muted"></span></p>
+        <p class="muted small" id="arm-desc"></p>
+        <button id="reset-btn" class="btn btn-secondary" type="button">Reset consultation</button>
+      </aside>
+
+      <div class="chat card">
+        <div id="messages" class="messages" aria-live="polite">
+          <div class="empty" id="empty-state">
+            <p class="empty-title">Describe what you're experiencing</p>
+            <p class="muted">For example: “I have a burning chest pain after eating spicy food.”</p>
+          </div>
+        </div>
+        <div id="error" class="error" role="alert" hidden></div>
+        <form id="composer" class="composer" autocomplete="off">
+          <textarea id="input" rows="1" placeholder="Describe your symptoms…" aria-label="Your message" required></textarea>
+          <button id="send-btn" class="btn btn-primary" type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="panel-results" class="panel" role="tabpanel" aria-labelledby="tab-results" hidden>
+      <div class="card">
+        <h2>Benchmark summary by arm</h2>
+        <p class="muted small">Top-k accuracy is whether the ground-truth diagnosis appears within the first k items of the model's differential.</p>
+        <div id="summary" class="summary"><p class="muted">Loading results…</p></div>
+      </div>
+      <div class="results-grid">
+        <div class="card">
+          <h2>Accuracy chart</h2>
+          <img id="chart" src="results/accuracy_by_arm.png" alt="Bar chart of top-1 and top-5 accuracy by prompting arm, with error bars" loading="lazy">
+          <p id="chart-missing" class="muted" hidden>Chart not available. Run <code>python eval/run_eval.py</code> to generate it.</p>
+        </div>
+        <div class="card">
+          <h2>Per-case results</h2>
+          <div class="table-wrap"><table id="cases-table"></table></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer muted small">Educational demo only · Not medical advice</footer>
+</body>
+</html>

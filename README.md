@@ -140,6 +140,43 @@ streamlit run frontend/app.py
 
 ---
 
+## 🚀 Public Cloud Deployment Guide
+
+### Option A: Deploying Backend to Render
+
+1. Create a free account at [render.com](https://render.com/).
+2. Click **New +** -> **Blueprint** (or **Web Service**) and connect your GitHub repository.
+3. If using **Blueprint**, Render automatically detects `render.yaml`.
+4. If manually configuring a **Web Service**:
+   - **Root Directory**: `symptomcheck-mini`
+   - **Runtime**: `Python`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+5. Under **Environment**, add your secret key:
+   - Key: `GROQ_API_KEY`, Value: `gsk_your_actual_groq_key`
+6. Click **Deploy Web Service**.
+7. Note your live backend URL (e.g., `https://symptomcheck-mini-backend.onrender.com/chat`).
+
+---
+
+### Option B: Deploying Frontend to Streamlit Community Cloud
+
+1. Push your repository to GitHub.
+2. Sign in to [share.streamlit.io](https://share.streamlit.io/).
+3. Click **New App** and select your repository, branch, and file path:
+   - **Main file path**: `symptomcheck-mini/frontend/app.py`
+4. Click **Advanced settings...** -> **Secrets** and paste:
+   ```toml
+   GROQ_API_KEY = "gsk_your_actual_groq_key"
+   BACKEND_URL = "https://your-render-backend-url.onrender.com/chat"
+   ```
+5. Click **Deploy!**
+
+> ⚡ **Cold Start Notice**:
+> Free-tier hosting on Render spins down containers after 15 minutes of inactivity. The first HTTP request after dormancy may take **~30 seconds** to wake up the server.
+
+---
+
 ## ⚠️ PROMINENT MEDICAL DISCLAIMER
 
 > [!CAUTION]
